@@ -741,12 +741,27 @@ function rGauges(res,mcm,mes){
   const pM=meta?ejec/meta:0,pP=planif?ejec/planif:0;
   const cM=pM>=1?'#00843D':pM>=.7?'#E07B00':'#CE1126';
   const cP=pP>=1?'#00843D':pP>=.7?'#E07B00':'#CE1126';
+  // IE sin visitar en el mes
+  const visMes = D.vis.filter(r=>(r['Mes (YYYY-MM)']||'').trim()===mes);
+  const sinVisita = visMes.filter(r=>!r['Fecha Ejecutada']||r['Fecha Ejecutada'].trim()==='').length;
+  const conVisita = visMes.filter(r=>r['Fecha Ejecutada']&&r['Fecha Ejecutada'].trim()!=='').length;
+  // Entregables Volartech completos
+  const vtCompletos = visMes.filter(r=>{
+    const f=(r['Ficha Técnica (72h)']||'').trim().toLowerCase();
+    const m=(r['Material Nube (48h)']||'').trim().toLowerCase();
+    return f&&f!==''&&f!=='pendiente' && m&&m!==''&&m!=='pendiente';
+  }).length;
+  const vtTotal = visMes.filter(r=>r['Fecha Ejecutada']&&r['Fecha Ejecutada'].trim()!=='').length;
+  const vtPct = vtTotal ? Math.round(vtCompletos/vtTotal*100) : 0;
+  const cVT = vtPct>=80?'#00843D':vtPct>=50?'#E07B00':'#CE1126';
+
   const G=[
     {v:meta,l:'Meta Contractual',s:'Visitas requeridas',c:'#003087'},
-    {v:planif,l:'Planificadas',s:'Programadas',c:'#1565C0'},
+    {v:planif,l:'Planificadas',s:'Programadas mes',c:'#1565C0'},
     {v:ejec,l:'Ejecutadas',s:'Completadas',c:'#00843D'},
     {v:Math.round(pM*100)+'%',l:'% vs Meta',s:ejec+' de '+meta,c:cM,p:pM},
-    {v:Math.round(pP*100)+'%',l:'% vs Plan',s:ejec+' de '+(planif||'—'),c:cP,p:pP},
+    {v:sinVisita,l:'IE Sin Visitar',s:'Pendientes en el mes',c:sinVisita>0?'#CE1126':'#00843D'},
+    {v:vtPct+'%',l:'Entregables Volartech',s:vtCompletos+' de '+vtTotal+' completos',c:cVT,p:vtTotal?vtCompletos/vtTotal:0},
   ];
   document.getElementById('gauges').innerHTML=G.map(g=>
     `<div class="gc"><div class="gv" style="color:${g.c}">${g.v}</div><div class="gl">${g.l}</div><div class="gs">${g.s}</div>${g.p!==undefined?`<div class="gbw"><div class="gbf" style="width:${Math.min(g.p*100,100)}%;background:${g.c}"></div></div>`:''}</div>`
