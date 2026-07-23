@@ -1134,12 +1134,18 @@ function mieVidBtns(d){
   }).join('');
   return '<div style="margin-top:8px">'+btns+'</div>';
 }
-function mieEmbedUrl(u){
-  if(u.includes('stream.aspx')&&!u.includes('embed=')) return u+'&embed=%7B%22ust%22%3Atrue%2C%22hv%22%3A%22CopyEmbedCode%22%7D';
-  return u;
+function mieDirectUrl(u){
+  // deriva la URL directa del archivo desde un enlace stream.aspx (?id=/sites/...MP4)
+  try{
+    const m=u.match(/[?&]id=([^&]+)/);
+    if(m){ const o=new URL(u); return o.origin+decodeURIComponent(m[1]); }
+  }catch(e){}
+  return null;
 }
 function mieVideo(i){
-  const u=MIE_VIDREG[i]; if(!u) return;
+  let u=MIE_VIDREG[i]; if(!u) return;
+  // si pegaron el código <iframe> completo, extraer el src
+  const fm=u.match(/src="([^"]+)"/); if(fm) u=fm[1];
   let m=document.getElementById('mie-modal');
   if(!m){
     m=document.createElement('div'); m.id='mie-modal';
@@ -1150,18 +1156,33 @@ function mieVideo(i){
       +'<span style="display:flex;gap:10px;align-items:center">'
       +'<a id="mie-modal-open" href="#" target="_blank" style="color:#FDC800;font-size:12px;font-weight:700;text-decoration:none;font-family:Barlow,sans-serif">Abrir en SharePoint ↗</a>'
       +'<button onclick="mieVideoClose()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1">✕</button></span></div>'
-      +'<div style="position:relative;padding-top:56.25%"><iframe id="mie-modal-frame" src="" allowfullscreen allow="autoplay; fullscreen" style="position:absolute;inset:0;width:100%;height:100%;border:none;background:#000"></iframe></div>'
+      +'<div id="mie-modal-body" style="position:relative;padding-top:56.25%;background:#000"></div>'
       +'<div style="padding:8px 16px;background:#002060;color:rgba(255,255,255,.55);font-size:11px;font-family:Barlow,sans-serif">Si el video no carga, inicia sesión con tu cuenta corporativa o usa \u201cAbrir en SharePoint\u201d.</div></div>';
     m.onclick=e=>{if(e.target===m)mieVideoClose();};
     document.body.appendChild(m);
   }
   m.style.display='flex';
-  document.getElementById('mie-modal-open').href=u;
-  document.getElementById('mie-modal-frame').src=mieEmbedUrl(u);
+  document.getElementById('mie-modal-open').href=MIE_VIDREG[i];
+  const body=document.getElementById('mie-modal-body');
+  const st='position:absolute;inset:0;width:100%;height:100%;border:none';
+  const fallback='<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#fff;font-family:Barlow,sans-serif;text-align:center;padding:20px">'
+    +'<div style="font-size:40px">🔒</div><div style="font-size:14px;max-width:420px">No fue posible reproducir el video aquí. Ábrelo directamente en SharePoint con tu cuenta corporativa.</div>'
+    +'<a href="'+MIE_VIDREG[i]+'" target="_blank" style="background:#FDC800;color:#0D1B3E;font-weight:800;border-radius:8px;padding:9px 18px;text-decoration:none;font-size:13px">Abrir en SharePoint ↗</a></div>';
+  if(u.includes('embed.aspx')){
+    body.innerHTML='<iframe src="'+u+'" allowfullscreen allow="autoplay; fullscreen" style="'+st+';background:#000"></iframe>';
+  }else{
+    const direct=mieDirectUrl(u);
+    if(direct){
+      body.innerHTML='<video controls autoplay playsinline style="'+st+';background:#000" src="'+direct.replace(/"/g,'&quot;')+'"></video>';
+      body.querySelector('video').onerror=()=>{body.innerHTML=fallback;};
+    }else{
+      body.innerHTML=fallback;
+    }
+  }
 }
 function mieVideoClose(){
   const m=document.getElementById('mie-modal');
-  if(m){m.style.display='none';document.getElementById('mie-modal-frame').src='';}
+  if(m){m.style.display='none';document.getElementById('mie-modal-body').innerHTML='';}
 }
 function initMapaIE(){
   if(mieMap){ setTimeout(()=>mieMap.invalidateSize(),150); return; }
