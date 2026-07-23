@@ -1124,6 +1124,45 @@ function mieParseCSV(text){const rows=[];let row=[],cur='',q=false;
    else cur+=c; } }
  if(cur.length||row.length){row.push(cur);rows.push(row);} return rows;}
 let mieMap=null,mieGroups={};
+const MIE_VIDREG=[];
+function mieVidBtns(d){
+  if(!d.vids||!d.vids.length) return '';
+  const btns=d.vids.map((u,i)=>{
+    const vi=MIE_VIDREG.push(u)-1;
+    const lbl=d.vids.length===1?'🎥 Ver video del vuelo':'🎥 Video '+(i+1);
+    return '<a href="javascript:void(0)" onclick="mieVideo('+vi+')" style="display:inline-block;margin:3px 4px 0 0;background:#003087;color:#fff;border-radius:7px;padding:5px 11px;font-size:11px;font-weight:700;text-decoration:none">'+lbl+'</a>';
+  }).join('');
+  return '<div style="margin-top:8px">'+btns+'</div>';
+}
+function mieEmbedUrl(u){
+  if(u.includes('stream.aspx')&&!u.includes('embed=')) return u+'&embed=%7B%22ust%22%3Atrue%2C%22hv%22%3A%22CopyEmbedCode%22%7D';
+  return u;
+}
+function mieVideo(i){
+  const u=MIE_VIDREG[i]; if(!u) return;
+  let m=document.getElementById('mie-modal');
+  if(!m){
+    m=document.createElement('div'); m.id='mie-modal';
+    m.style.cssText='position:fixed;inset:0;background:rgba(0,15,40,.82);z-index:9500;display:flex;align-items:center;justify-content:center;padding:4vh 4vw';
+    m.innerHTML='<div style="background:#0D1B3E;border-radius:14px;overflow:hidden;width:min(1100px,100%);box-shadow:0 20px 60px rgba(0,0,0,.5)">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#002060">'
+      +'<span style="color:#fff;font-weight:700;font-size:13px;font-family:Barlow,sans-serif">🎥 Video del vuelo · SharePoint</span>'
+      +'<span style="display:flex;gap:10px;align-items:center">'
+      +'<a id="mie-modal-open" href="#" target="_blank" style="color:#FDC800;font-size:12px;font-weight:700;text-decoration:none;font-family:Barlow,sans-serif">Abrir en SharePoint ↗</a>'
+      +'<button onclick="mieVideoClose()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1">✕</button></span></div>'
+      +'<div style="position:relative;padding-top:56.25%"><iframe id="mie-modal-frame" src="" allowfullscreen allow="autoplay; fullscreen" style="position:absolute;inset:0;width:100%;height:100%;border:none;background:#000"></iframe></div>'
+      +'<div style="padding:8px 16px;background:#002060;color:rgba(255,255,255,.55);font-size:11px;font-family:Barlow,sans-serif">Si el video no carga, inicia sesión con tu cuenta corporativa o usa \u201cAbrir en SharePoint\u201d.</div></div>';
+    m.onclick=e=>{if(e.target===m)mieVideoClose();};
+    document.body.appendChild(m);
+  }
+  m.style.display='flex';
+  document.getElementById('mie-modal-open').href=u;
+  document.getElementById('mie-modal-frame').src=mieEmbedUrl(u);
+}
+function mieVideoClose(){
+  const m=document.getElementById('mie-modal');
+  if(m){m.style.display='none';document.getElementById('mie-modal-frame').src='';}
+}
 function initMapaIE(){
   if(mieMap){ setTimeout(()=>mieMap.invalidateSize(),150); return; }
   mieMap=L.map('mapaIE',{zoomControl:true}).setView([4.6,-74.3],6);
@@ -1141,6 +1180,7 @@ function mieLoad(){
      const col=n=>hdr.findIndex(h=>h.includes(n));
      const iDep=col('departamento'),iMun=col('municipio'),iIE=col('institucion'),iSede=col('sede'),
            iVis=col('visitas'),iEst=col('estado'),iLat=col('lat'),iLon=col('lon');
+     const iVid=col('video');
      const data=[],missing=new Set();
      for(let r=1;r<rows.length;r++){const R=rows[r];
        if(!R||!R[iIE]||!String(R[iIE]).trim())continue;
@@ -1148,7 +1188,7 @@ function mieLoad(){
        let lat=null,lon=null;
        if(iLat>=0&&iLon>=0&&R[iLat]&&R[iLon]){lat=parseFloat(String(R[iLat]).replace(',','.'));lon=parseFloat(String(R[iLon]).replace(',','.'));}
        if(lat===null||isNaN(lat)){const c=MIE_COORDS[mieNk(R[iMun])]; if(!c){missing.add(R[iMun]);continue;} lat=c[0];lon=c[1];}
-       data.push({dep:R[iDep],mun:R[iMun],ie:R[iIE],sede:R[iSede]||'',vis:vis,est:String(R[iEst]||'').trim(),lat:lat,lon:lon,cat:mieCat(R[iEst])});
+       data.push({dep:R[iDep],mun:R[iMun],ie:R[iIE],sede:R[iSede]||'',vis:vis,est:String(R[iEst]||'').trim(),lat:lat,lon:lon,cat:mieCat(R[iEst]),vids:String((iVid>=0?R[iVid]:'')||'').split(/[\s,;]+/).filter(u=>u.startsWith('http'))});
      }
      const g={}; data.forEach((d,i)=>{const k=d.lat.toFixed(4)+','+d.lon.toFixed(4);(g[k]=g[k]||[]).push(i);});
      Object.values(g).forEach(ix=>{ if(ix.length<2)return; const R=0.055;
@@ -1178,7 +1218,8 @@ function mieRender(DATA){
       +'<div style="font-size:12px"><b>Municipio:</b> '+d.mun+'</div>'
       +'<div style="font-size:12px"><b>Zona:</b> '+d.dep+'</div>'
       +'<div style="margin-top:6px"><span style="background:#FDC800;color:#0D1B3E;font-weight:800;border-radius:20px;padding:2px 10px;font-size:12px">'+d.vis+' visita'+(d.vis==1?'':'s')+'</span> '
-      +'<span style="color:'+c+';border:1px solid '+c+';border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700">'+(MIE_LABELS[d.cat]||d.est)+'</span></div></div>');
+      +'<span style="color:'+c+';border:1px solid '+c+';border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700">'+(MIE_LABELS[d.cat]||d.est)+'</span></div>'
+      +mieVidBtns(d)+'</div>');
     mieGroups[d.cat].addLayer(m);
   });
   const ies=new Set(DATA.map(d=>String(d.ie).trim().toUpperCase()));
