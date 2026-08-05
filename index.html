@@ -175,7 +175,29 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--txt);font-
 .fb3{background:var(--navy);color:rgba(255,255,255,.4);text-align:center;padding:14px;font-size:11px}
 .fb3 strong{color:rgba(255,255,255,.7)}
 @media(max-width:1200px){.kpis{grid-template-columns:repeat(4,1fr)}.g21,.g11,.g4{grid-template-columns:1fr}.rtg{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:700px){.wrap{padding:14px 14px 40px}.hm,.hn{padding:0 14px}.kpis{grid-template-columns:1fr 1fr}.rtg{grid-template-columns:1fr 1fr}.hbg{display:none}}
+@media(max-width:700px){
+  .wrap{padding:12px 10px 40px}
+  .hm{padding:8px 12px;height:auto;flex-wrap:wrap;gap:8px}
+  .hn{padding:0 8px}
+  .ltx h1{font-size:12px}
+  .ltx p{display:none}
+  .hr2{flex-wrap:wrap;gap:6px;width:100%;justify-content:flex-start}
+  .hbg{display:block;padding:4px 8px}
+  .lchip{display:none}
+  .kpis{grid-template-columns:1fr 1fr;gap:8px}
+  .kpi{padding:12px}.kv{font-size:28px}
+  .rtg{grid-template-columns:1fr 1fr}
+  .grow{gap:8px}.gc{min-width:100px;padding:12px}.gv{font-size:30px}
+  .tsc{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .dt,.mt{min-width:640px}
+  .cb{padding:14px}
+  .fb .sbx{margin-left:0;width:100%}
+  #mapaIE{height:62vh!important;min-height:400px!important}
+  #mie-search{width:100%!important}
+  #mie-sugg{width:calc(100vw - 60px)!important;max-width:320px}
+  #mie-warn{max-width:180px;font-size:10px}
+  .ig{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
@@ -332,8 +354,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--txt);font-
       <div id="mie-stats" style="display:flex;gap:8px;flex-wrap:wrap"></div>
     </div>
     <div style="display:flex;gap:10px;padding:12px 20px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--brd);background:var(--sur2)">
-      <div style="position:relative">
-        <input id="mie-search" type="text" placeholder="🔍 Buscar IE o municipio…" autocomplete="off" oninput="mieSearch(this.value)" onblur="setTimeout(()=>{document.getElementById('mie-sugg').style.display='none'},250)" style="font-family:Barlow,sans-serif;font-size:12px;padding:7px 13px;border:1.5px solid var(--brd);border-radius:20px;outline:none;width:250px">
+      <div style="position:relative;flex:1;min-width:180px;max-width:280px">
+        <input id="mie-search" type="text" placeholder="🔍 Buscar IE o municipio…" autocomplete="off" oninput="mieSearch(this.value)" onblur="setTimeout(()=>{document.getElementById('mie-sugg').style.display='none'},250)" style="font-family:Barlow,sans-serif;font-size:12px;padding:7px 13px;border:1.5px solid var(--brd);border-radius:20px;outline:none;width:100%">
         <div id="mie-sugg" style="display:none;position:absolute;top:36px;left:0;z-index:900;background:#fff;border:1px solid var(--brd);border-radius:10px;box-shadow:var(--smd);width:320px;max-height:260px;overflow-y:auto"></div>
       </div>
       <select id="mie-mes" onchange="mieApply()" style="font-family:Barlow,sans-serif;font-size:12px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:8px;background:var(--sur);outline:none">
@@ -344,11 +366,6 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--txt);font-
     </div>
     <div style="position:relative">
       <div id="mapaIE" style="height:calc(100vh - 300px);min-height:540px;width:100%"></div>
-      <div id="mie-legend" style="position:absolute;bottom:14px;left:14px;z-index:800;background:rgba(255,255,255,.96);border:1px solid var(--brd);border-radius:12px;padding:12px 14px;font-size:12px;box-shadow:var(--smd);max-width:230px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--mut);font-weight:700;margin-bottom:8px">Estado del proyecto</div>
-        <div id="mie-lrows"></div>
-        <div style="margin-top:8px;font-size:10px;color:var(--mut);line-height:1.4">El número del pin = visitas a la sede. El ✓ verde confirma la visita. Clic en un estado para filtrar.</div>
-      </div>
       <div id="mie-warn" style="position:absolute;bottom:14px;right:14px;z-index:800;display:none;background:var(--robg);border:1px solid var(--ro);border-radius:10px;padding:9px 13px;font-size:11px;max-width:260px;color:#7A0018"></div>
     </div>
   </div>
@@ -1392,18 +1409,6 @@ function mieRender(DATA){
     +'<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:20px;font-weight:800;color:var(--navy2);line-height:1">'+n+'</div>'
     +'<div style="font-size:9px;color:var(--mut);text-transform:uppercase;letter-spacing:.8px;font-weight:700">'+l+'</div></div>';
   document.getElementById('mie-stats').innerHTML=chip(ies.size,'IE')+chip(DATA.length,'Sedes')+chip(muns.size,'Municipios')+chip(tot,'Visitas');
-  const lr=document.getElementById('mie-lrows'); lr.innerHTML='';
-  const counts={}; DATA.forEach(d=>counts[d.cat]=(counts[d.cat]||0)+1);
-  Object.keys(MIE_COLORS).forEach(k=>{
-    if(!counts[k])return;
-    const row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:8px;margin:5px 0;cursor:pointer;font-weight:600;color:var(--txt)';
-    row.innerHTML='<span style="width:13px;height:13px;border-radius:50%;background:'+MIE_COLORS[k]+';flex-shrink:0;border:2px solid #fff;box-shadow:0 0 0 1px var(--brd)"></span>'
-      +MIE_LABELS[k]+' <span style="color:var(--mut)">('+counts[k]+')</span>';
-    row.onclick=()=>{ if(mieMap.hasLayer(mieGroups[k])){mieMap.removeLayer(mieGroups[k]);row.style.opacity=.35;row.style.textDecoration='line-through';}
-      else{mieMap.addLayer(mieGroups[k]);row.style.opacity=1;row.style.textDecoration='none';} };
-    lr.appendChild(row);
-  });
   if(DATA.length&&!location.hash.includes('ie=')) mieMap.fitBounds(L.latLngBounds(DATA.map(d=>[d.lat,d.lon])),{padding:[50,50]});
 }
 </script>
