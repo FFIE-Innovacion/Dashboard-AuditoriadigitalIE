@@ -1096,7 +1096,7 @@ function rVolartech(vis, mes){
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 /* ══ MAPA INTERACTIVO IE ══ */
-const MIE_CSV='https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6hh1EfZwAn2ziUXvPleW9dhW16K31BMFATqPgseuDQDqaz0Alk9Q95eAKVRiEk1E24cduIt4izdDe/pub?gid=1582918418&single=true&output=csv';
+const MIE_CSV='https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6hh1EfZwAn2ziUXvPleW9dhW16K31BMFATqPgseuDQDqaz0Alk9Q95eAKVRiEk1E24cduIt4izdDe/pub?gid=14273822&single=true&output=csv';
 const MIE_COORDS={'vigia del fuerte':[6.5875,-76.8956],'bogota':[4.6597,-74.0817],'tunja':[5.5353,-73.3678],
 'buenaventura':[3.8801,-77.0313],'samurindo':[5.53,-76.66],'pacora':[5.529,-75.459],'riosucio (caldas)':[5.422,-75.703],
 'villamaria':[5.043,-75.512],'cali':[3.4516,-76.532],'rio quito':[5.483,-76.741],'floridablanca':[7.063,-73.0866],
@@ -1125,12 +1125,23 @@ function mieParseCSV(text){const rows=[];let row=[],cur='',q=false;
  if(cur.length||row.length){row.push(cur);rows.push(row);} return rows;}
 let mieMap=null,mieGroups={};
 const MIE_VIDREG=[];
+function mieVids(s){
+  // cada linea: "dd/mm/aaaa|url" (fecha de vuelo) o solo "url"
+  return s.split(/\n+/).map(l=>{
+    l=l.trim(); if(!l) return null;
+    const m=l.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\|(https?:\/\/\S+)/);
+    if(m) return {f:m[1],u:m[2]};
+    const h=l.match(/https?:\/\/\S+/);
+    return h?{f:'',u:h[0]}:null;
+  }).filter(v=>v);
+}
 function mieVidBtns(d){
   if(!d.vids||!d.vids.length) return '';
-  const btns=d.vids.map((u,i)=>{
-    const vi=MIE_VIDREG.push(u)-1;
-    const lbl=d.vids.length===1?'🎥 Ver video del vuelo':'🎥 Video '+(i+1);
-    return '<a href="javascript:void(0)" onclick="mieVideo('+vi+')" style="display:inline-block;margin:3px 4px 0 0;background:#003087;color:#fff;border-radius:7px;padding:5px 11px;font-size:11px;font-weight:700;text-decoration:none">'+lbl+'</a>';
+  const btns=d.vids.map((v,i)=>{
+    const vi=MIE_VIDREG.push(v.u)-1;
+    const base=d.vids.length===1?'🎥 Ver video del vuelo':'🎥 Video '+(i+1);
+    const fecha=v.f?'<span style="display:block;font-size:10px;font-weight:600;opacity:.8;margin-top:1px">Vuelo: '+v.f+'</span>':'';
+    return '<a href="javascript:void(0)" onclick="mieVideo('+vi+')" style="display:inline-block;margin:3px 4px 0 0;background:#003087;color:#fff;border-radius:7px;padding:5px 11px;font-size:11px;font-weight:700;text-decoration:none;text-align:center">'+base+fecha+'</a>';
   }).join('');
   return '<div style="margin-top:8px">'+btns+'</div>';
 }
@@ -1209,7 +1220,7 @@ function mieLoad(){
        let lat=null,lon=null;
        if(iLat>=0&&iLon>=0&&R[iLat]&&R[iLon]){lat=parseFloat(String(R[iLat]).replace(',','.'));lon=parseFloat(String(R[iLon]).replace(',','.'));}
        if(lat===null||isNaN(lat)){const c=MIE_COORDS[mieNk(R[iMun])]; if(!c){missing.add(R[iMun]);continue;} lat=c[0];lon=c[1];}
-       data.push({dep:R[iDep],mun:R[iMun],ie:R[iIE],sede:R[iSede]||'',vis:vis,est:String(R[iEst]||'').trim(),lat:lat,lon:lon,cat:mieCat(R[iEst]),vids:String((iVid>=0?R[iVid]:'')||'').split(/[\s,;]+/).filter(u=>u.startsWith('http'))});
+       data.push({dep:R[iDep],mun:R[iMun],ie:R[iIE],sede:R[iSede]||'',vis:vis,est:String(R[iEst]||'').trim(),lat:lat,lon:lon,cat:mieCat(R[iEst]),vids:mieVids(String((iVid>=0?R[iVid]:'')||''))});
      }
      const g={}; data.forEach((d,i)=>{const k=d.lat.toFixed(4)+','+d.lon.toFixed(4);(g[k]=g[k]||[]).push(i);});
      Object.values(g).forEach(ix=>{ if(ix.length<2)return; const R=0.055;
