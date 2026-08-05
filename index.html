@@ -1190,6 +1190,14 @@ function mieObra(d){
       const bySede=cands.filter(r=>{const rs=nk(r.sede);return st.some(w=>rs.includes(w));});
       if(bySede.length) cands=bySede;
     }
+    /* solo visitas reales ejecutadas: excluye filas de planificacion futura */
+    const visitadas=cands.filter(r=>/^s[ií]/i.test(String(r.visitada||'').trim()));
+    if(visitadas.length){ cands=visitadas; }
+    else{
+      const cur=new Date().toISOString().slice(0,7);
+      const pasadas=cands.filter(r=>(r.mes||'')&&r.mes<=cur);
+      if(pasadas.length) cands=pasadas; else return null;
+    }
     cands.sort((a,b)=>(b.mes||'').localeCompare(a.mes||''));
     return cands[0];
   }catch(e){return null;}
