@@ -331,6 +331,17 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--txt);font-
       <div class="chl"><span>📍</span><div><div class="ct">Cobertura nacional de visitas</div><div class="cs" id="mie-sync">Cargando datos desde Google Sheets…</div></div></div>
       <div id="mie-stats" style="display:flex;gap:8px;flex-wrap:wrap"></div>
     </div>
+    <div style="display:flex;gap:10px;padding:12px 20px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--brd);background:var(--sur2)">
+      <div style="position:relative">
+        <input id="mie-search" type="text" placeholder="🔍 Buscar IE o municipio…" autocomplete="off" oninput="mieSearch(this.value)" onblur="setTimeout(()=>{document.getElementById('mie-sugg').style.display='none'},250)" style="font-family:Barlow,sans-serif;font-size:12px;padding:7px 13px;border:1.5px solid var(--brd);border-radius:20px;outline:none;width:250px">
+        <div id="mie-sugg" style="display:none;position:absolute;top:36px;left:0;z-index:900;background:#fff;border:1px solid var(--brd);border-radius:10px;box-shadow:var(--smd);width:320px;max-height:260px;overflow-y:auto"></div>
+      </div>
+      <select id="mie-mes" onchange="mieApply()" style="font-family:Barlow,sans-serif;font-size:12px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:8px;background:var(--sur);outline:none">
+        <option value="">📅 Todos los meses</option>
+      </select>
+      <button id="mie-alert-chip" onclick="mieToggleAlert()" style="font-family:Barlow,sans-serif;font-size:11px;font-weight:700;padding:6px 13px;border-radius:20px;border:1.5px solid var(--ro);background:var(--sur);color:var(--ro);cursor:pointer">⚠️ Sin vuelo +30 días: <span id="mie-alert-n">0</span></button>
+      <span id="mie-filter-info" style="font-size:11px;color:var(--mut)"></span>
+    </div>
     <div style="position:relative">
       <div id="mapaIE" style="height:calc(100vh - 300px);min-height:540px;width:100%"></div>
       <div id="mie-legend" style="position:absolute;bottom:14px;left:14px;z-index:800;background:rgba(255,255,255,.96);border:1px solid var(--brd);border-radius:12px;padding:12px 14px;font-size:12px;box-shadow:var(--smd);max-width:230px">
@@ -1124,9 +1135,9 @@ function mieParseCSV(text){const rows=[];let row=[],cur='',q=false;
    else cur+=c; } }
  if(cur.length||row.length){row.push(cur);rows.push(row);} return rows;}
 let mieMap=null,mieGroups={};
+let MIE_DATA=[],MIE_MARKERS={},MIE_ALERTONLY=false;
 const MIE_VIDREG=[];
 function mieVids(s){
-  // cada linea: "dd/mm/aaaa|url" (fecha de vuelo) o solo "url"
   return s.split(/\n+/).map(l=>{
     l=l.trim(); if(!l) return null;
     const m=l.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\|(https?:\/\/\S+)/);
@@ -1135,18 +1146,59 @@ function mieVids(s){
     return h?{f:'',u:h[0]}:null;
   }).filter(v=>v);
 }
-function mieVidBtns(d){
+function mieFDate(f){ const p=(f||'').split('/'); return p.length===3?new Date(+p[2],+p[1]-1,+p[0]):null; }
+function mieSlug(d){ return mieNk(d.ie+'-'+(d.sede||'')).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
+function mieDias(d){
+  const fs=d.vids.map(v=>mieFDate(v.f)).filter(x=>x);
+  if(!fs.length) return null;
+  const last=new Date(Math.max.apply(null,fs));
+  return Math.floor((Date.now()-last)/(864e5));
+}
+function mieStale(d){ return d.cat!=='terminada' && (()=>{const n=mieDias(d);return n!==null&&n>30;})(); }
+/* cruce con BASE_PM (ya cargado por el dashboard) */
+function mieObra(d){
+  try{
+    if(!D.base||!D.base.length) return null;
+    const base=getBase(); if(!base.length) return null;
+    const nk=x=>mieNk(x).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+    const tgt=nk(d.ie);
+    let cands=base.filter(r=>nk(r.ie)===tgt);
+    if(!cands.length){
+      const tt=tgt.split(' ').filter(w=>w.length>2&&!['ie','ied','antes'].includes(w));
+      cands=base.filter(r=>{const rn=nk(r.ie);return tt.length&&tt.every(w=>rn.includes(w));});
+    }
+    if(!cands.length) return null;
+    if(cands.length>1&&d.sede){
+      const st=nk(d.sede).split(' ').filter(w=>w.length>2);
+      const bySede=cands.filter(r=>{const rs=nk(r.sede);return st.some(w=>rs.includes(w));});
+      if(bySede.length) cands=bySede;
+    }
+    cands.sort((a,b)=>(b.mes||'').localeCompare(a.mes||''));
+    return cands[0];
+  }catch(e){return null;}
+}
+function mieTimeline(d){
   if(!d.vids||!d.vids.length) return '';
-  const btns=d.vids.map((v,i)=>{
+  const rows=d.vids.map((v,i)=>{
     const vi=MIE_VIDREG.push(v.u)-1;
-    const base=d.vids.length===1?'🎥 Ver video del vuelo':'🎥 Video '+(i+1);
-    const fecha=v.f?'<span style="display:block;font-size:10px;font-weight:600;opacity:.8;margin-top:1px">Vuelo: '+v.f+'</span>':'';
-    return '<a href="javascript:void(0)" onclick="mieVideo('+vi+')" style="display:inline-block;margin:3px 4px 0 0;background:#003087;color:#fff;border-radius:7px;padding:5px 11px;font-size:11px;font-weight:700;text-decoration:none;text-align:center">'+base+fecha+'</a>';
+    const last=i===d.vids.length-1&&d.vids.length>1;
+    return '<div style="display:flex;align-items:center;gap:8px;padding:3px 0">'
+      +'<span style="width:8px;height:8px;border-radius:50%;background:'+(last?'#00843D':'#1565C0')+';flex-shrink:0"></span>'
+      +'<span style="font-size:11px;color:'+(last?'#0D1B3E':'#5A6A8A')+';font-weight:'+(last?'800':'600')+';width:72px">'+(v.f||'s.f.')+'</span>'
+      +'<a href="javascript:void(0)" onclick="mieVideo('+vi+')" style="font-size:11px;font-weight:700;color:#003087;text-decoration:none">🎥 Ver video</a>'
+      +(last?'<span style="font-size:9px;background:#E6F4ED;color:#00843D;font-weight:800;padding:1px 7px;border-radius:10px">ÚLTIMO</span>':'')
+      +'</div>';
   }).join('');
-  return '<div style="margin-top:8px">'+btns+'</div>';
+  return '<div style="margin-top:8px;border-top:1px solid #E1E6F0;padding-top:7px">'
+    +'<div style="font-size:9px;letter-spacing:.8px;color:#5A6A8A;font-weight:800;margin-bottom:3px">HISTORIAL DE VUELOS</div>'+rows+'</div>';
+}
+function mieShare(slug){
+  const url=location.origin+location.pathname+'#ie='+slug;
+  const done=()=>{const b=document.getElementById('mie-share-'+slug);if(b){b.textContent='✓ Copiado';setTimeout(()=>{b.textContent='🔗 Copiar link';},1800);}};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(done).catch(()=>prompt('Copia el link:',url));}
+  else prompt('Copia el link:',url);
 }
 function mieDirectUrl(u){
-  // deriva la URL directa del archivo desde un enlace stream.aspx (?id=/sites/...MP4)
   try{
     const m=u.match(/[?&]id=([^&]+)/);
     if(m){ const o=new URL(u); return o.origin+decodeURIComponent(m[1]); }
@@ -1155,7 +1207,6 @@ function mieDirectUrl(u){
 }
 function mieVideo(i){
   let u=MIE_VIDREG[i]; if(!u) return;
-  // si pegaron el código <iframe> completo, extraer el src
   const fm=u.match(/src="([^"]+)"/); if(fm) u=fm[1];
   let m=document.getElementById('mie-modal');
   if(!m){
@@ -1168,7 +1219,7 @@ function mieVideo(i){
       +'<a id="mie-modal-open" href="#" target="_blank" style="color:#FDC800;font-size:12px;font-weight:700;text-decoration:none;font-family:Barlow,sans-serif">Abrir en SharePoint ↗</a>'
       +'<button onclick="mieVideoClose()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1">✕</button></span></div>'
       +'<div id="mie-modal-body" style="position:relative;padding-top:56.25%;background:#000"></div>'
-      +'<div style="padding:8px 16px;background:#002060;color:rgba(255,255,255,.55);font-size:11px;font-family:Barlow,sans-serif">Si el video no carga, inicia sesión con tu cuenta corporativa o usa \u201cAbrir en SharePoint\u201d.</div></div>';
+      +'<div style="padding:8px 16px;background:#002060;color:rgba(255,255,255,.55);font-size:11px;font-family:Barlow,sans-serif">Si el video no carga, inicia sesión con tu cuenta corporativa o usa “Abrir en SharePoint”.</div></div>';
     m.onclick=e=>{if(e.target===m)mieVideoClose();};
     document.body.appendChild(m);
   }
@@ -1225,33 +1276,113 @@ function mieLoad(){
      const g={}; data.forEach((d,i)=>{const k=d.lat.toFixed(4)+','+d.lon.toFixed(4);(g[k]=g[k]||[]).push(i);});
      Object.values(g).forEach(ix=>{ if(ix.length<2)return; const R=0.055;
        ix.forEach((idx,j)=>{const a=2*Math.PI*j/ix.length; data[idx].lat+=R*Math.cos(a); data[idx].lon+=R*Math.sin(a)*1.02;});});
-     mieRender(data);
+     MIE_DATA=data;
+     mieMeses();
+     mieApply();
      document.getElementById('mie-sync').textContent='Conectado a Google Sheets · actualizado '+new Date().toLocaleString('es-CO');
      if(missing.size){const w=document.getElementById('mie-warn');w.style.display='block';
        w.innerHTML='<b>Municipios sin coordenadas:</b> '+[...missing].join(', ')+'. Agrega columnas LAT y LON en el Sheets.';}
+     mieHash();
    })
    .catch(e=>{document.getElementById('mie-sync').textContent='⚠️ No se pudo cargar el Sheets ('+e.message+')';});
 }
+function mieMeses(){
+  const sel=document.getElementById('mie-mes'); if(!sel) return;
+  const set=new Set();
+  MIE_DATA.forEach(d=>d.vids.forEach(v=>{const p=(v.f||'').split('/'); if(p.length===3) set.add(p[2]+'-'+p[1]);}));
+  const meses=[...set].sort();
+  const NM={'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril','05':'Mayo','06':'Junio','07':'Julio','08':'Agosto','09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre'};
+  sel.innerHTML='<option value="">📅 Todos los meses</option>'+meses.map(m=>{const[y,mm]=m.split('-');return '<option value="'+m+'">'+NM[mm]+' '+y+'</option>';}).join('');
+}
+function mieToggleAlert(){
+  MIE_ALERTONLY=!MIE_ALERTONLY;
+  const b=document.getElementById('mie-alert-chip');
+  b.style.background=MIE_ALERTONLY?'var(--ro)':'var(--sur)';
+  b.style.color=MIE_ALERTONLY?'#fff':'var(--ro)';
+  mieApply();
+}
+function mieApply(){
+  const mes=document.getElementById('mie-mes')?document.getElementById('mie-mes').value:'';
+  let data=MIE_DATA;
+  if(mes) data=data.filter(d=>d.vids.some(v=>{const p=(v.f||'').split('/');return p.length===3&&(p[2]+'-'+p[1])===mes;}));
+  const nAlert=MIE_DATA.filter(mieStale).length;
+  const el=document.getElementById('mie-alert-n'); if(el) el.textContent=nAlert;
+  if(MIE_ALERTONLY) data=data.filter(mieStale);
+  const info=document.getElementById('mie-filter-info');
+  if(info) info.textContent=(mes||MIE_ALERTONLY)?('Mostrando '+data.length+' de '+MIE_DATA.length+' sedes'):'';
+  mieRender(data);
+}
+function mieSearch(q){
+  const box=document.getElementById('mie-sugg');
+  q=mieNk(q);
+  if(!q||q.length<2){box.style.display='none';return;}
+  const hits=MIE_DATA.filter(d=>mieNk(d.ie).includes(q)||mieNk(d.mun).includes(q)).slice(0,8);
+  if(!hits.length){box.style.display='none';return;}
+  box.innerHTML=hits.map(d=>'<div onclick="mieGoto(\''+mieSlug(d)+'\')" style="padding:8px 13px;cursor:pointer;border-bottom:1px solid #F0F2F7" onmouseover="this.style.background=\'#F5F8FF\'" onmouseout="this.style.background=\'#fff\'">'
+    +'<div style="font-size:12px;font-weight:700;color:#0D1B3E">'+d.ie+'</div>'
+    +'<div style="font-size:10px;color:#5A6A8A">'+d.mun+' · '+d.vis+' visita'+(d.vis==1?'':'s')+'</div></div>').join('');
+  box.style.display='block';
+}
+function mieGoto(slug){
+  const box=document.getElementById('mie-sugg'); if(box)box.style.display='none';
+  const m=MIE_MARKERS[slug]; if(!m) return;
+  const d=MIE_DATA.find(x=>mieSlug(x)===slug);
+  Object.keys(mieGroups).forEach(k=>{if(!mieMap.hasLayer(mieGroups[k]))mieMap.addLayer(mieGroups[k]);});
+  mieMap.flyTo([d.lat,d.lon],14,{duration:1.2});
+  setTimeout(()=>m.openPopup(),1300);
+}
+function mieHash(){
+  const h=location.hash.match(/#ie=([a-z0-9-]+)/);
+  if(h&&MIE_MARKERS[h[1]]){
+    const nav=document.querySelector(".nb[onclick*='mapa']");
+    if(nav&&!document.getElementById('tab-mapa').classList.contains('on')) nav.click();
+    setTimeout(()=>mieGoto(h[1]),600);
+  }
+}
 function mieRender(DATA){
   Object.values(mieGroups).forEach(gr=>gr.clearLayers());
+  MIE_MARKERS={};
   DATA.forEach(d=>{
     const c=MIE_COLORS[d.cat]||MIE_COLORS.otro;
+    const stale=mieStale(d);
     const size=30+Math.min(d.vis,5)*6;
+    const ring=stale?'#CE1126':'#fff';
     const icon=L.divIcon({className:'',iconSize:[size,size],iconAnchor:[size/2,size],popupAnchor:[0,-size],
       html:'<div style="position:relative;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;'
-        +'border:2.5px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 4px 10px rgba(0,0,0,.35);'
+        +'border:3px solid '+ring+';border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 4px 10px rgba(0,0,0,.35);'
         +'width:'+size+'px;height:'+size+'px;background:'+c+';font-family:Barlow,sans-serif">'
         +'<span style="transform:rotate(45deg);font-size:12px">'+d.vis+'</span>'
-        +'<div style="position:absolute;top:-8px;right:-8px;transform:rotate(45deg);background:#00843D;color:#fff;'
-        +'border:2px solid #fff;border-radius:50%;width:16px;height:16px;font-size:9px;display:flex;align-items:center;justify-content:center">✓</div></div>'});
+        +(stale
+          ?'<div style="position:absolute;top:-8px;right:-8px;transform:rotate(45deg);background:#CE1126;color:#fff;border:2px solid #fff;border-radius:50%;width:16px;height:16px;font-size:9px;display:flex;align-items:center;justify-content:center">!</div>'
+          :'<div style="position:absolute;top:-8px;right:-8px;transform:rotate(45deg);background:#00843D;color:#fff;border:2px solid #fff;border-radius:50%;width:16px;height:16px;font-size:9px;display:flex;align-items:center;justify-content:center">✓</div>')
+        +'</div>'});
     const m=L.marker([d.lat,d.lon],{icon:icon});
-    m.bindPopup('<div style="font-family:Barlow,sans-serif"><div style="font-weight:800;color:#003087;font-size:13px;margin-bottom:5px">'+d.ie+'</div>'
+    const dias=mieDias(d);
+    const slug=mieSlug(d);
+    const obra=mieObra(d);
+    let obraHtml='';
+    if(obra){
+      const av=obra.avance||0, col=av>=75?'#00843D':av>=40?'#E07B00':'#CE1126';
+      obraHtml='<div style="margin-top:7px;border-top:1px solid #E1E6F0;padding-top:7px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span style="color:#5A6A8A;font-weight:700">Avance de obra</span><span style="font-weight:800;color:'+col+'">'+av.toFixed(1)+'%</span></div>'
+        +'<div style="height:6px;background:#E1E6F0;border-radius:3px;overflow:hidden"><div style="width:'+Math.min(av,100)+'%;height:100%;background:'+col+'"></div></div>'
+        +(obra.coord?'<div style="font-size:11px;margin-top:5px"><b>Coordinación:</b> '+obra.coord+'</div>':'')
+        +'</div>';
+    }
+    m.bindPopup('<div style="font-family:Barlow,sans-serif;min-width:250px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
+      +'<div style="font-weight:800;color:#003087;font-size:13px;margin-bottom:5px">'+d.ie+'</div>'
+      +'<a href="javascript:void(0)" id="mie-share-'+slug+'" onclick="mieShare(\''+slug+'\')" style="flex-shrink:0;font-size:10px;font-weight:700;color:#003087;text-decoration:none;border:1px solid #E1E6F0;border-radius:6px;padding:3px 7px;white-space:nowrap">🔗 Copiar link</a></div>'
       +(d.sede?'<div style="font-size:12px"><b>Sede:</b> '+d.sede+'</div>':'')
       +'<div style="font-size:12px"><b>Municipio:</b> '+d.mun+'</div>'
       +'<div style="font-size:12px"><b>Zona:</b> '+d.dep+'</div>'
       +'<div style="margin-top:6px"><span style="background:#FDC800;color:#0D1B3E;font-weight:800;border-radius:20px;padding:2px 10px;font-size:12px">'+d.vis+' visita'+(d.vis==1?'':'s')+'</span> '
-      +'<span style="color:'+c+';border:1px solid '+c+';border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700">'+(MIE_LABELS[d.cat]||d.est)+'</span></div>'
-      +mieVidBtns(d)+'</div>');
+      +'<span style="color:'+c+';border:1px solid '+c+';border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700">'+(MIE_LABELS[d.cat]||d.est)+'</span>'
+      +(stale?' <span style="background:#FDEAED;color:#CE1126;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800">⚠ '+dias+' días sin vuelo</span>':'')
+      +'</div>'
+      +obraHtml
+      +mieTimeline(d)+'</div>',{maxWidth:320});
+    MIE_MARKERS[slug]=m;
     mieGroups[d.cat].addLayer(m);
   });
   const ies=new Set(DATA.map(d=>String(d.ie).trim().toUpperCase()));
@@ -1273,7 +1404,7 @@ function mieRender(DATA){
       else{mieMap.addLayer(mieGroups[k]);row.style.opacity=1;row.style.textDecoration='none';} };
     lr.appendChild(row);
   });
-  if(DATA.length) mieMap.fitBounds(L.latLngBounds(DATA.map(d=>[d.lat,d.lon])),{padding:[50,50]});
+  if(DATA.length&&!location.hash.includes('ie=')) mieMap.fitBounds(L.latLngBounds(DATA.map(d=>[d.lat,d.lon])),{padding:[50,50]});
 }
 </script>
 </body>
