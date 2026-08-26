@@ -1300,8 +1300,8 @@ function mieVideoClose(){
 function initMapaIE(){
   if(mieMap){ setTimeout(()=>mieMap.invalidateSize(),150); return; }
   mieMap=L.map('mapaIE',{zoomControl:true}).setView([4.6,-74.3],6);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    {attribution:'© OpenStreetMap © CARTO',maxZoom:19}).addTo(mieMap);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(mieMap);
   Object.keys(MIE_COLORS).forEach(k=>mieGroups[k]=L.layerGroup().addTo(mieMap));
   setTimeout(()=>mieMap.invalidateSize(),150);
   mieLoad();
@@ -1319,9 +1319,16 @@ function mieLoad(){
      for(let r=1;r<rows.length;r++){const R=rows[r];
        if(!R||!R[iIE]||!String(R[iIE]).trim())continue;
        const vis=parseInt(R[iVis]); if(!vis&&vis!==0)continue;
+       /* ubicacion por MUNICIPIO (tabla interna); LAT/LON del Sheets solo como respaldo */
        let lat=null,lon=null;
-       if(iLat>=0&&iLon>=0&&R[iLat]&&R[iLon]){lat=parseFloat(String(R[iLat]).replace(',','.'));lon=parseFloat(String(R[iLon]).replace(',','.'));}
-       if(lat===null||isNaN(lat)){const c=MIE_COORDS[mieNk(R[iMun])]; if(!c){missing.add(R[iMun]);continue;} lat=c[0];lon=c[1];}
+       const cM=MIE_COORDS[mieNk(R[iMun])];
+       if(cM){ lat=cM[0]; lon=cM[1]; }
+       else if(iLat>=0&&iLon>=0&&R[iLat]&&R[iLon]){
+         lat=parseFloat(String(R[iLat]).replace(',','.'));lon=parseFloat(String(R[iLon]).replace(',','.'));
+         if(lon>0) lon=-lon;
+         if(isNaN(lat)||lat<-5||lat>14||lon<-80||lon>-66) lat=null;
+       }
+       if(lat===null||isNaN(lat)){missing.add(R[iMun]);continue;}
        data.push({dep:R[iDep],mun:R[iMun],ie:R[iIE],sede:R[iSede]||'',vis:vis,est:String(R[iEst]||'').trim(),lat:lat,lon:lon,cat:mieCat(R[iEst]),vids:mieVids(String((iVid>=0?R[iVid]:'')||'')),v360:mieVids(String((iV360>=0?R[iV360]:'')||'')),tl:mieVids(String((iTl>=0?R[iTl]:'')||''))});
      }
      const g={}; data.forEach((d,i)=>{const k=d.lat.toFixed(4)+','+d.lon.toFixed(4);(g[k]=g[k]||[]).push(i);});
